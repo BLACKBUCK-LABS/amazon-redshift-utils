@@ -49,9 +49,15 @@ import traceback
 from multiprocessing import Pool
 
 import boto3
+import pandas as pd
 import pg8000
 import pgpasslib
 import shortuuid
+
+from common.dao.repository.table_info_repo import TableInfoRepo
+from pandas import DataFrame
+
+from common.config.config import WHITELISTED_SCHEMA_NAMES
 
 try:
     sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
@@ -90,6 +96,7 @@ def get_env_var(name, default_value):
 
 
 db_connections = {}
+table_info_repo = TableInfoRepo()
 db = get_env_var('PGDATABASE', None)
 db_user = get_env_var('PGUSER', None)
 db_pwd = None
@@ -533,6 +540,7 @@ def reduce_column_length(col_type, column_name, table_name):
 def analyze(table_info):
     schema_name = table_info[0]
     table_name = table_info[1]
+    row_count = table_info[3]
     dist_style = table_info[4]
     owner = table_info[5]
     if len(table_info) > 6:
@@ -865,6 +873,13 @@ def analyze(table_info):
             return ERROR
 
         print_statements(statements)
+        if True or encodings_modified:
+            df = DataFrame()
+            df = df.append(
+                pd.Series([table_name.lower(), schema_name.lower(), 'ENCODED', encodings_modified],
+                          index=['table_name','schema_name', 'activity', 'encodings_modified']),
+                ignore_index=True)
+            table_info_repo.add(df)
 
         return (OK, fks, encodings_modified)
 
@@ -973,6 +988,23 @@ def configure(**kwargs):
                 comment("Created Cloudwatch Emitter in %s" % aws_region)
 
 
+def is_table_valid(encoded_table_info_df, table_info_to_be_encoded):
+    table_name_to_be_encoded = table_info_to_be_encoded[1].lower()
+    schema_name_to_be_encoded = table_info_to_be_encoded[0].lower()
+    row_count = table_info_to_be_encoded[3]
+    if schema_name_to_be_encoded not in WHITELISTED_SCHEMA_NAMES:
+        return False
+    if comprows is not None and (row_count < comprows):
+        print("row count is %s which is less than comprows for %s" % (row_count, table_name))
+        return False
+    filtered_df = encoded_table_info_df.loc[encoded_table_info_df['table_name'] == table_name_to_be_encoded]
+    if filtered_df is not None and not filtered_df.empty:
+        filtered_df = filtered_df.loc[filtered_df['schema_name'] == schema_name_to_be_encoded]
+
+    if filtered_df is None or filtered_df.empty:
+        return True
+    return False
+
 def run():
     # get a connection for the controlling processes
     master_conn = get_pg_conn()
@@ -1044,20 +1076,20 @@ order by 2;
         comment(statement)
 
     query_result = execute_query(statement)
-
     if query_result is None:
         comment("Unable to issue table query - aborting")
         return ERROR
 
     table_names = []
+    encoded_table_info_df = table_info_repo.get_by_activity('ENCODED')
     for row in query_result:
-        table_names.append(row)
-
-    comment("Analyzing %s table(s) which contain allocated data blocks" % (len(table_names)))
-
+        if is_table_valid(encoded_table_info_df, row):
+            table_names.append(row)
+            comment("Analyzing %s of %s table(s) which contain allocated data blocks" % (row[1], len(table_names)))
+        # else:
+        #     print("table %s is already encoded" % row[1])
     if debug:
         [comment(str(x)) for x in table_names]
-
     result = []
 
     if table_names is not None:
@@ -1120,6 +1152,7 @@ order by 2;
             return ERROR
 
     comment('Processing Complete')
+
     cleanup(master_conn)
 
     return OK
