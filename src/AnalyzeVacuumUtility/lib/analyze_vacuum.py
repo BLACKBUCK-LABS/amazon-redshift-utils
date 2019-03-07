@@ -287,10 +287,9 @@ def run_vacuum(conn,
 
     vacuum_statements = execute_query(conn, get_vacuum_statement)
     comment("Found %s Tables requiring Vacuum and flagged by alert" % len(vacuum_statements))
-
     for vs in vacuum_statements:
         statements.append(vs[0])
-        statements.append("analyze %s.\"%s\"" % (vs[2], vs[1]))
+        #statements.append("analyze %s.\"%s\"" % (vs[2], vs[1]))
 
     if not run_commands(conn, statements, cw=cw, cluster_name=cluster_name, suppress_errors=ignore_errors):
         if not ignore_errors:
