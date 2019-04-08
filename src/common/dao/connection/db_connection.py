@@ -1,4 +1,3 @@
-import MySQLdb
 from common.config.config import *
 from sqlalchemy import create_engine
 

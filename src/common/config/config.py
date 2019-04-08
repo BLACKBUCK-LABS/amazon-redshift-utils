@@ -9,9 +9,11 @@ env = None
 if "ENV" in os.environ:
     env = os.environ['ENV']
 if env == 'prod':
+    print(env)
     from config_prod import *
 elif env == 'preprod':
     from config_preprod import *
 else:
+    print("local")
     from config_local import *
 
