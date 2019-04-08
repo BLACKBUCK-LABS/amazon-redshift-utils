@@ -993,7 +993,7 @@ def is_table_valid(encoded_table_info_df, table_info_to_be_encoded):
     schema_name_to_be_encoded = table_info_to_be_encoded[0].lower()
     row_count = table_info_to_be_encoded[3]
     if schema_name_to_be_encoded not in WHITELISTED_SCHEMA_NAMES:
-        print("skipping schema_name_to_be_encoded's table")
+        print("skipping %s table %s schema" % (table_name_to_be_encoded, schema_name_to_be_encoded))
         return False
     if comprows is not None and (row_count < comprows):
         print("row count is %s which is less than comprows for %s" % (row_count, table_name))
